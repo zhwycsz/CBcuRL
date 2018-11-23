@@ -1,12 +1,12 @@
 import numpy as np
 import math
+from scipy.integrate import odeint
 
 
 """
 General functions and classes used by all agents.
 
 """
-
 
 def sdot(S, t, Cin, A, params, num_species): # X is population vector, t is time, R is intrinsic growth rate vector, C is the rate limiting nutrient vector, A is interaction matrix
     '''
@@ -35,7 +35,7 @@ def sdot(S, t, Cin, A, params, num_species): # X is population vector, t is time
     Cin = Cin[:num_species]
 
     # calculate derivatives
-    dN = N * (R + np.matmul(A,N) - q) # q term takes account of the dilution
+    dN = N * (R.astype(float) + np.matmul(A,N)- q) # q term takes account of the dilution
     dC = q*(Cin - C) - (1/y)*R*N # sometimes dC.shape is (2,2)
     dC0 = q*(C0in - C0) - sum(1/y3[i]*R[i]*N[i] for i in range(num_species))
 
@@ -77,31 +77,9 @@ def monod(C, C0, Rmax, Km, Km0):
 
 
 
-def get_explore_rate(episode, MIN_EXPLORE_RATE, denominator): # increase denominator to explore for longer
+def get_rate(episode, MIN_LEARNING_RATE,  MAX_LEARNING_RATE, denominator):
     '''
-    Calculates the logarithmically decreasing explore rate
-
-    Parameters:
-        episode: the current episode
-        MIN_EXPLORE_RATE: the minimum possible explore_rate
-        denominator: controls the rate of decay of the explore rate
-    Returns:
-        explore_rate: the chance the agent will take a random action
-    '''
-
-    # input validation
-    if not 0 <= MIN_EXPLORE_RATE <= 1:
-        raise ValueError("MIN_EXPLORE_RATE needs to be bewteen 0 and 1")
-
-    if not 0 < denominator:
-        raise ValueError("denominator needs to be above 0")
-
-    explore_rate = max(MIN_EXPLORE_RATE, min(1.0,1.0 - math.log10((episode+1)/(denominator))))
-    return explore_rate
-
-def get_learning_rate(episode, MIN_LEARNING_RATE,  MAX_LEARNING_RATE, denominator):
-    '''
-    Calculates the logarithmically decreasing learning rate
+    Calculates the logarithmically decreasing explore or learning rate
 
     Parameters:
         episode: the current episode
@@ -122,9 +100,9 @@ def get_learning_rate(episode, MIN_LEARNING_RATE,  MAX_LEARNING_RATE, denominato
     if not 0 < denominator:
         raise ValueError("denominator needs to be above 0")
 
-    learning_rate = max(MIN_LEARNING_RATE, min(MAX_LEARNING_RATE, 1.0 - math.log10((episode+1)/denominator)))
+    rate = max(MIN_LEARNING_RATE, min(MAX_LEARNING_RATE, 1.0 - math.log10((episode+1)/denominator)))
 
-    return learning_rate
+    return rate
 
 def state_to_bucket(state, N_bounds, num_N_states):
     '''
@@ -310,10 +288,10 @@ def convert_to_numpy(param_dict):
 
     # convert all relevant parameters into numpy arrays
     param_dict['ode_params'][1], param_dict['ode_params'][2], param_dict['ode_params'][3] = \
-        np.array(param_dict['ode_params'][1]), np.array(param_dict['ode_params'][2]), np.array(param_dict['ode_params'][3])
-    param_dict['Q_params'][0] = np.array(param_dict['Q_params'][0])
-    param_dict['Q_params'][8] = np.array(param_dict['Q_params'][8])
-    param_dict['Q_params'][9] = np.array(param_dict['Q_params'][9])
+        np.array(param_dict['ode_params'][1], dtype = float), np.array(param_dict['ode_params'][2], dtype = float), np.array(param_dict['ode_params'][3], dtype = float)
+    param_dict['Q_params'][0] = np.array(param_dict['Q_params'][0], dtype = float)
+    param_dict['Q_params'][8] = np.array(param_dict['Q_params'][8], dtype = float)
+    param_dict['Q_params'][9] = np.array(param_dict['Q_params'][9], dtype = float)
 
     return param_dict
 
@@ -390,7 +368,9 @@ def validate_param_dict(param_dict):
         raise ValueError("MAX_STEP_SIZE needs to be between zero and one")
     if not 0 <= train_params[7] <= 1:
         raise ValueError("MIN_EXPLORE_RATE needs to be between zero and one")
-    if not all(isinstance(l, int) and l > 0 for l in train_params[9]):
+    if not 0 <= train_params[8] <= 1:
+        raise ValueError("MAX_EXPLORE_RATE needs to be between zero and one")
+    if not all(isinstance(l, int) and l > 0 for l in train_params[10]):
         raise ValueError("layers sizes needs to be a list of positive integers")
 
     noise_params = param_dict['noise_params']
