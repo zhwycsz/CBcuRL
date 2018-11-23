@@ -43,8 +43,6 @@ class NeuralAgent():
         self.experience_buffer = ExperienceBuffer(buffer_size)
 
 
-
-
     def create_network(self,layer_sizes, type):
         '''
         Creates a neural network and returns the input and output layers
@@ -297,7 +295,7 @@ class NeuralAgent():
         sess.run([self.updateModel], feed_dict = {self.inputs: states, self.TD_target:Qs})
 
         #update target network
-        target_update_freq = 100
+        target_update_freq = 1000
         tau = 1. # proportion of primary network used in update
         if nIters % target_update_freq == 0:
             # update target network to the primary networks weights

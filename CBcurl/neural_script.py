@@ -38,8 +38,8 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
     param_dict = convert_to_numpy(param_dict)
 
     #extract parameters
-    NUM_EPISODES, test_freq, explore_denom, step_denom, T_MAX,MIN_STEP_SIZE,\
-        MAX_STEP_SIZE, MIN_EXPLORE_RATE, cutoff, hidden_layers, buffer_size = param_dict['train_params']
+    NUM_EPISODES, test_freq, explore_denom, step_denom, T_MAX, MIN_STEP_SIZE,\
+        MAX_STEP_SIZE, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, cutoff, hidden_layers, buffer_size = param_dict['train_params']
     NOISE, error = param_dict['noise_params']
     num_species, num_controlled_species, num_N_states, num_Cin_states = \
         param_dict['Q_params'][1], param_dict['Q_params'][2],  param_dict['Q_params'][3],param_dict['Q_params'][5]
@@ -78,6 +78,7 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
             X = initial_X
             C = initial_C
             C0 = initial_C0
+            X = np.random.random_integers(0, 1000, (2,))
 
             for t in range(T_MAX):
                 X, C, C0 = agent.pre_train_step(sess, X, C, C0, t, Q_params, ode_params)
@@ -95,8 +96,8 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
             xSol = np.array([X])
             running_reward = 0
             ep_history = np.array([[]])
-            explore_rate = get_explore_rate(episode, MIN_EXPLORE_RATE, explore_denom)
-            step_size = get_learning_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
+            explore_rate = get_rate(episode, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, explore_denom)
+            step_size = get_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
 
             # run episode
             for t in range(T_MAX):

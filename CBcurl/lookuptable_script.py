@@ -13,7 +13,7 @@ from plot_funcs import *
 from lookuptable_agent import *
 
 
-def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = False):
+def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = False, pretrained_table = None):
     '''
     Carries out a training run using a lookuptable agent
 
@@ -37,7 +37,7 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
 
     # extract parameters
     NUM_EPISODES, test_freq, explore_denom, step_denom, T_MAX,MIN_STEP_SIZE, \
-        MAX_STEP_SIZE, MIN_EXPLORE_RATE, cutoff, _, _  = param_dict['train_params']
+        MAX_STEP_SIZE, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, cutoff, _, _  = param_dict['train_params']
     NOISE, error = param_dict['noise_params']
     num_species, num_controlled_species, num_N_states, num_Cin_states = \
         param_dict['Q_params'][1], param_dict['Q_params'][2],  param_dict['Q_params'][3],param_dict['Q_params'][5]
@@ -52,12 +52,11 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
     test_rewards, rewards_avs, test_ts, time_avs, reward_sds, time_sds = [], [], [], [], [], []
     episode_ts, episode_rewards = [], []
 
-    agent = LookupTableAgent(num_N_states, num_Cin_states, num_species, num_controlled_species, reward_func)
+    agent = LookupTableAgent(num_N_states, num_Cin_states, num_species, num_controlled_species, reward_func, pretrained_table)
 
     # make directories to store results
     os.makedirs(os.path.join(save_path, 'WORKING_data', 'train'), exist_ok = True)
     os.makedirs(os.path.join(save_path, 'WORKING_graphs', 'train'), exist_ok = True)
-
 
     for episode in range(1,NUM_EPISODES + 1):
         # reset for this episode
@@ -69,8 +68,8 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
 
         done = False
 
-        explore_rate = get_explore_rate(episode, MIN_EXPLORE_RATE, explore_denom)
-        step_size = get_learning_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
+        explore_rate = get_rate(episode, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, explore_denom)
+        step_size = get_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
 
         #run episode
         for t in range(T_MAX):
@@ -167,10 +166,17 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
 if __name__ == '__main__': # for running on the cluster
 
     three_speces = {
-        'ode_params': [1., 0.5, [480000., 480000., 480000.], [520000., 520000., 520000.], [0.6, 0.6, 0.6], [0.00048776, 0.00000102115, 0.00000102115], [0.00006845928, 0.00006845928,  0.00006845928]],
+        'ode_params': [1., 0.5, [480000., 480000., 480000.], [520000., 520000., 520000.], [0.6, 0.6, 0.6], [0.00048776, 0.00000102115, 0.00048], [0.00006845928, 0.00006845928,  0.00006845928]],
         'Q_params': [[[0, -0.00005, -0.00005],[-0.00005, 0, -0.00005], [-0.00005,-0.00005,0]], 3,3, 10, [0.,1000.], 2, [0., 0.1], 0.9, [200., 200., 200.], [0.05, 0.05, 0.05], 1.],
-        'train_params': [50000, 100, 970, 1000, 1000, 0.05, 0.5, 0., [50,50,50,50]],
+        'train_params': [10000, 100, 970, 1000, 1000, 0.05, 0.5, 0., 1. [50,50,50,50], 1000],
         'noise_params': [False, 0.1]
+    }
+
+    two_sp_unstable = {
+        'ode_params': [1., 0.5, [480000., 480000], [520000., 520000.], [0.6, 0.6], [0.00048776, 0.00000102115], [0.00006845928, 0.00006845928]],
+        'Q_params': [[[0., -0.0001], [-0.0001, 0.]], 2, 2, 10, [0., 1000.], 2, [0., 0.1], 0.9, [200., 200.], [0.05, 0.05], 1.],
+        'train_params': [10000, 100, 950, 1000, 1000, 0.05, 0.5, 0., 1., [50,50,50,50], 1000],
+        'noise_params': [False, 0.05]
     }
 
     single_auxotroph =  {
@@ -181,9 +187,9 @@ if __name__ == '__main__': # for running on the cluster
     }
 
     smaller_target_params = {
-        'ode_params': [1., 0.5, [480000., 480000.], [520000., 520000.], [0.6, 0.6], [0.00048776, 0.00048776], [0.00006845928, 0.00006845928]],
+        'ode_params': [1., 0.5, [480000., 480000.], [520000., 520000.], [0.6, 0.6], [0.00048776, 0.00000102115], [0.00006845928, 0.00006845928]],
         'Q_params': [[[-0.0001, -0.0001],[-0.0001, -0.0001]], 2,2, 10, [0.,1000.], 2, [0., 0.1], 0.9, [250.,550.], [0.05,0.05], 1.],
-        'train_params': [10000, 100, 950, 1000, 1000, 0.05, 0.5, 0., [50,50,50,50]],
+        'train_params': [10000, 100, 950, 1000, 1000, 0.05, 0.5, 0., 0.1, [50,50,50,50], 1000],
         'noise_params': [False, 0.05]
     }
 

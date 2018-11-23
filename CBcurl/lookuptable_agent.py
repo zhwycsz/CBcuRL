@@ -9,7 +9,7 @@ class LookupTableAgent():
     '''
     Class that handles reinforcement learning using a lookuptable to store state-action value estimates
     '''
-    def __init__(self, num_N_states, num_Cin_states, num_species, num_controlled_species, reward_func = False):
+    def __init__(self, num_N_states, num_Cin_states, num_species, num_controlled_species, reward_func = False, pretrained_table = None):
         '''
         Parameters:
             num_N_states: the number of discrete population states the agent can see for each species
@@ -36,7 +36,10 @@ class LookupTableAgent():
             raise ValueError("num_controlled_species cannot be larger than num_species")
 
         #initilise Q_table
-        self.Q_table = np.zeros(tuple([num_N_states]*num_species + [num_Cin_states]*num_controlled_species))
+        if pretrained_table:
+            self.Q_table = pretrained_table
+        else:
+            self.Q_table = np.zeros(tuple([num_N_states]*num_species + [num_Cin_states]*num_controlled_species))
 
 
     def train_step(self, X, C, C0, t, explore_rate, learning_rate, Q_params, ode_params):
