@@ -42,7 +42,6 @@ class NeuralAgent():
         self.predict = tf.argmax(self.predQ, 1)
         self.experience_buffer = ExperienceBuffer(buffer_size)
 
-
     def create_network(self,layer_sizes, type):
         '''
         Creates a neural network and returns the input and output layers
@@ -76,6 +75,67 @@ class NeuralAgent():
         return inputs, output
 
 
+    def choose_concentration(self, sess, state, explore_rate, Q_params):
+        _, _, num_controlled_species, _, _, num_Cin_states, Cin_bounds,_ = Q_params # extract parameters
+
+        allQ = np.array(sess.run(self.predQ, feed_dict= {self.inputs:state})) # get Q values for this state
+
+        # check network isnt outputting Nan
+        assert all(not np.isnan(Q) for Q in allQ[0]) , 'Nan found in output, network probably unstable'
+
+        action = epsilon_greedy(explore_rate, allQ) # get predicted best action
+
+        # convert chosen action index to a concentration
+        Cin = action_to_state(action, num_controlled_species, num_Cin_states, Cin_bounds) # take out this line to remove the effect of the algorithm
+
+        return Cin, action, allQ,
+
+
+    def get_next_solution(self, Cin, X, C, C0, Q_params, ode_params, t):
+
+        A, num_species, num_controlled_species, _, _, _, _, _ = Q_params
+
+        if num_species - num_controlled_species == 1: # hacky way to check for single zuxotroph system
+            Cin = np.append([1], Cin)
+
+
+        # create state vector
+        S = np.append(X, C)
+        S = np.append(S, C0)
+
+        time_diff = 4 # frame skipping
+        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
+
+        # extract information from solution
+        xSol = sol[:, 0:num_species]
+        X1 = sol[-1, :num_species]
+        C1 = sol[-1, num_species:-1]
+        C01 = sol[-1, -1]
+
+        assert len(Cin) == num_species, 'Cin is the wrong length: ' + str(len(Cin))
+        assert len(X1) == num_species, 'X is the wrong length: ' + str(len(X))
+        assert len(C1) == num_species, 'C is the wrong length: ' + str(len(C1))
+
+        return X1, C1, C01, xSol
+
+    def train_network(self, sess, X1, state, action, allQ, reward, Q_params, step_size):
+
+        _, num_species, _, num_N_states, N_bounds, _, _, gamma = Q_params
+        # turn new state into one hot vector
+        state1 = state_to_one_hot(X1, num_species, N_bounds, num_N_states) # flatten to a vector
+
+        # get Q values for new state
+        Q1 = sess.run(self.predQ, feed_dict = {self.inputs: state1})
+
+        #build temporal difference target
+        maxQ1 = np.max(Q1)
+        targetQ = allQ
+        targetQ[0, action] += step_size*(reward + gamma*maxQ1 - allQ[0,action])
+
+        # train network based on target and predicted Q values
+        sess.run([self.updateModel], feed_dict = {self.inputs: state, self.TD_target:targetQ})
+
+s
     def train_step(self, sess, X, C, C0, t, visited_states, explore_rate, step_size, Q_params, ode_params,n):
         '''Carries out one instantaneous Q_learning training step
         Parameters:
@@ -95,55 +155,19 @@ class NeuralAgent():
             xSol: full next bit of the populations solutions, including the skipped frames
             reward
         '''
+        _, num_species, _, num_N_states, N_bounds, _, _, _ = Q_params
 
-        A, num_species, num_controlled_species, num_N_states, N_bounds, num_Cin_states, Cin_bounds, gamma = Q_params # extract parameters
+        state = state_to_one_hot(X, num_species, N_bounds, num_N_states) # flatten to a one hot vector
 
-        state = state_to_one_hot(X, num_species, N_bounds, num_N_states) # flatten to a on hot vector
-        allQ = np.array(sess.run(self.predQ, feed_dict= {self.inputs:state})) # get Q values for this state
         visited_states += state # count states visited
 
-        # check network isnt outputting Nan
-        assert all(not np.isnan(Q) for Q in allQ[0]) , 'Nan found in output, network probably unstable'
+        Cin, action, allQ = self.choose_concentration(sess, state, explore_rate, Q_params)
 
-        action = epsilon_greedy(explore_rate, allQ) # get predicted best action
+        X1, C1, C01, xSol = self.get_next_solution(Cin, X, C, C0, Q_params, ode_params, t)
 
-        # create state vector
-        S = np.append(X, C)
-        S = np.append(S, C0)
-
-        # convert chosen action index to a concentration
-        Cin = action_to_state(action, num_controlled_species, num_Cin_states, Cin_bounds) # take out this line to remove the effect of the algorithm
-
-        if num_species - num_controlled_species == 1: # hacky way to check for single zuxotroph system
-            Cin = np.append([1], Cin)
-
-        time_diff = 4 # frame skipping
-        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
-
-        # extract information from solution
-        xSol = sol[:, 0:num_species]
-        X1 = sol[-1, :num_species]
-        C1 = sol[-1, num_species:-1]
-        C01 = sol[-1, -1]
-
-        assert len(Cin) == num_species, 'Cin is the wrong length: ' + str(len(Cin))
-        assert len(X1) == num_species, 'X is the wrong length: ' + str(len(X))
-        assert len(C1) == num_species, 'C is the wrong length: ' + str(len(C1))
-
-        # turn new state into one hot vector
-        state1 = state_to_one_hot(X1, num_species, N_bounds, num_N_states) # flatten to a vector
         reward = self.reward(X1)
 
-        # get Q values for new state
-        Q1 = sess.run(self.predQ, feed_dict = {self.inputs: state1})
-
-        #build temporal difference target
-        maxQ1 = np.max(Q1)
-        targetQ = allQ
-        targetQ[0, action] += step_size*(reward + gamma*maxQ1 - allQ[0,action])
-
-        # train network based on target and predicted Q values
-        sess.run([self.updateModel], feed_dict = {self.inputs: state, self.TD_target:targetQ})
+        self.train_network(sess, X1, state, action, allQ, reward, Q_params, step_size)
 
         return X1, C1, C01, xSol, reward, allQ, visited_states
 
@@ -173,7 +197,7 @@ class NeuralAgent():
         S = np.append(S, C0)
 
         # convert chosen action index to a concentration
-        Cin = action_to_state(action, num_controlled_species, num_Cin_states, Cin_bounds) # take out this line to remove the effect of the algorithm
+        Cin, allQ = action_to_state(action, num_controlled_species, num_Cin_states, Cin_bounds) # take out this line to remove the effect of the algorithm
 
         if num_species - num_controlled_species == 1: # hacky way to check for auxotroph system
             Cin = np.append([1], Cin)
