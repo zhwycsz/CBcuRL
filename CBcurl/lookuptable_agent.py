@@ -41,6 +41,55 @@ class LookupTableAgent():
         else:
             self.Q_table = np.zeros(tuple([num_N_states]*num_species + [num_Cin_states]*num_controlled_species))
 
+    def choose_concentration(self, state, explore_rate, Q_params):
+        _, num_species, num_controlled_species, _, _, num_Cin_states, Cin_bounds,_ = Q_params
+
+        # select an action
+        action_indeces = self.select_action(state, explore_rate, num_Cin_states, num_controlled_species)
+        action_index = np.ravel_multi_index(action_indeces, [num_Cin_states] * num_controlled_species) # turn into one hot index
+        Cin = action_to_state(action_index, num_controlled_species, num_Cin_states, Cin_bounds) # convert chosen action index to a concentration
+
+        if num_species - num_controlled_species == 1: # hacky way to check for single zuxotroph system
+            Cin = np.append([1], Cin)
+
+        return Cin, action_indeces
+
+
+    def get_next_solution(self, Cin, X, C, C0, Q_params, ode_params, t):
+
+        A, num_species, _, _, _, _, _, _ = Q_params
+
+        #create state vector
+        S = np.append(X, C)
+        S = np.append(S, C0)
+
+        # get next timsteps
+        time_diff = 4  # frame skipping
+        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
+
+        # extract next values from sol
+        xSol = sol[:, 0:num_species]
+        X1 = sol[-1, :num_species]
+        C1 = sol[-1, num_species:-1]
+        C01 = sol[-1, -1]
+
+
+        assert len(Cin) == num_species, 'Cin is the wrong length: ' + str(len(Cin))
+        assert len(X1) == num_species, 'X is the wrong length: ' + str(len(X))
+        assert len(C1) == num_species, 'C is the wrong length: ' + str(len(C1))
+
+        return X1, C1, C01, xSol
+
+
+    def update_table(self, X1, state, action_indeces, reward, Q_params, learning_rate):
+        _, num_species, _, num_N_states, N_bounds, _, _, gamma = Q_params
+        #discritise new state for next interation
+        state1 = state_to_bucket(X1, N_bounds, num_N_states)
+
+        # update Q table
+        best_q = np.max(self.Q_table[tuple(state)])
+        self.Q_table[tuple(state)][tuple(action_indeces)] += learning_rate*(reward+gamma*best_q - self.Q_table[tuple(state)][tuple(action_indeces)])
+
 
     def train_step(self, X, C, C0, t, explore_rate, learning_rate, Q_params, ode_params):
         '''
@@ -62,49 +111,22 @@ class LookupTableAgent():
             reward
         '''
         #extract parameters
-        A, num_species, num_controlled_species, num_N_states, N_bounds, num_Cin_states, Cin_bounds, gamma = Q_params
+        _, num_species, _, num_N_states, N_bounds, _, _, _ = Q_params
 
         #discritise current state
         state = np.array(state_to_bucket(X, N_bounds, num_N_states))
 
-        # select an action
-        action_indeces = self.select_action(state, explore_rate, num_Cin_states, num_controlled_species)
-        action_index = np.ravel_multi_index(action_indeces, [num_Cin_states] * num_controlled_species) # turn into one hot index
-        Cin = action_to_state(action_index, num_controlled_species, num_Cin_states, Cin_bounds) # convert chosen action index to a concentration
+        Cin, action_indeces = self.choose_concentration(state, explore_rate, Q_params)
 
-        if num_species - num_controlled_species == 1: # hacky way to check for single zuxotroph system
-            Cin = np.append([1], Cin)
-
-        #create state vector
-        S = np.append(X, C)
-        S = np.append(S, C0)
-
-        # get next timsteps
-        time_diff = 4  # frame skipping
-        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
-
-        # extract next values from sol
-        xSol = sol[:, 0:num_species]
-        X1 = sol[-1, :num_species]
-        C1 = sol[-1, num_species:-1]
-        C01 = sol[-1, -1]
-
-
-        assert len(Cin) == num_species, 'Cin is the wrong length: ' + str(len(Cin))
-        assert len(X1) == num_species, 'X is the wrong length: ' + str(len(X))
-        assert len(C1) == num_species, 'C is the wrong length: ' + str(len(C1))
-
+        X1, C1, C01, xSol = self.get_next_solution(Cin, X, C, C0, Q_params, ode_params, t)
 
         reward = self.reward(X1)
 
-        #discritise new state for next interation
-        state1 = state_to_bucket(X1, N_bounds, num_N_states)
-
-        # update Q table
-        best_q = np.max(self.Q_table[tuple(state)])
-        self.Q_table[tuple(state)][tuple(action_indeces)] += learning_rate*(reward+gamma*best_q - self.Q_table[tuple(state)][tuple(action_indeces)])
+        self.update_table(X1, state, action_indeces, reward, Q_params, learning_rate)
 
         return X1, C1, C01, xSol, reward
+
+
 
 
     def select_action(self, state, explore_rate, num_Cin_states, num_species):
