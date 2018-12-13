@@ -15,7 +15,23 @@ from utilities import *
 from neural_agent import *
 from plot_funcs import *
 
-def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
+
+def get_state_action(sess, agent, visited_states,  num_N_states, num_species):
+    # create and save state action plot
+    Q_actions = np.zeros((num_N_states**num_species))
+
+    for i in range(num_N_states**num_species):
+        if visited_states[0,i] == 0:
+            Q_actions[i] = - 1
+        else:
+            one_hot_state = np.zeros((1,num_N_states**num_species))
+            one_hot_state[0,i] = 1
+            allQ = np.array(sess.run(agent.predQ, feed_dict = {agent.inputs:one_hot_state}))
+            Q_actions[i] = np.argmax(allQ)
+    return Q_actions
+
+
+def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False, pretrained_network = None):
     '''
     Carries out a training run using a neural agent
 
@@ -37,18 +53,17 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
     validate_param_dict(param_dict)
     param_dict = convert_to_numpy(param_dict)
 
-    #extract parameters
-    NUM_EPISODES, test_freq, explore_denom, step_denom, T_MAX, MIN_STEP_SIZE,\
-        MAX_STEP_SIZE, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, cutoff, hidden_layers, buffer_size = param_dict['train_params']
+    # extract parameters
+    NUM_EPISODES, test_freq, explore_denom, step_denom, T_MAX,MIN_STEP_SIZE, \
+        MAX_STEP_SIZE, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, cutoff, hidden_layers, buffer_size  = param_dict['train_params']
     NOISE, error = param_dict['noise_params']
     num_species, num_controlled_species, num_N_states, num_Cin_states = \
-        param_dict['Q_params'][1], param_dict['Q_params'][2],  param_dict['Q_params'][3],param_dict['Q_params'][5]
+        param_dict['Q_params'][0], param_dict['Q_params'][1],  param_dict['Q_params'][2],param_dict['Q_params'][4]
     ode_params = param_dict['ode_params']
-    Q_params = param_dict['Q_params'][0:8]
-    initial_X = param_dict['Q_params'][8]
-    initial_C = param_dict['Q_params'][9]
-    initial_C0 = param_dict['Q_params'][10]
-
+    Q_params = param_dict['Q_params'][0:7]
+    initial_X = param_dict['Q_params'][7]
+    initial_C = param_dict['Q_params'][8]
+    initial_C0 = param_dict['Q_params'][9]
 
     tf.reset_default_graph() #clear the tensorflow graph.
 
@@ -63,9 +78,21 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
     os.makedirs(os.path.join(save_path,'WORKING_data','train'), exist_ok = True)
     os.makedirs(os.path.join(save_path,'WORKING_graphs','train'), exist_ok = True)
     os.makedirs(os.path.join(save_path,'WORKING_saved_network'), exist_ok = True)
+    os.makedirs(os.path.join(save_path,'state_actions'), exist_ok = True)
 
     with tf.Session() as sess:
         sess.run(init)
+
+        if pretrained_network:
+            saver.restore(sess, pretrained_network)
+
+
+        """
+        var = [v for v in tf.trainable_variables()]
+        for v in var:
+            print(sess.run(v))
+
+        """
 
         #initialise results tracking
         visited_states = np.zeros((1,num_N_states**num_species))
@@ -73,6 +100,7 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
         episode_ts, episode_rewards = [], []
 
         # fill buffef with experiences based on random actions
+        '''
         while len(agent.experience_buffer.buffer) < buffer_size:
             #reset
             X = initial_X
@@ -85,6 +113,7 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
 
                 if (not all(x>cutoff for x in X)) or t == T_MAX - 1: # if done
                     break
+        '''
 
         nIters = 0 # keep track for updating target network
         for episode in range(1,NUM_EPISODES+1):
@@ -140,6 +169,10 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
                 episode_ts = []
                 episode_rewards = []
 
+                Q_actions = get_state_action(sess, agent, visited_states, num_N_states, num_species)
+
+                np.save(os.path.join(save_path,'state_actions','state_action' + str(episode) + '.npy'), Q_actions)
+
                 if debug:
                     # plot current population curves
                     plt.figure(figsize = (22.0,12.0))
@@ -150,21 +183,17 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
                 episode_ts.append(t)
 
         xSol = np.array(xSol)
+
+        """
+        var = [v for v in tf.trainable_variables()]
+        for v in var:
+            print(sess.run(v))
         network_save_path = saver.save(sess, os.path.join(save_path,'WORKING_saved_network','trained_network.ckpt'))
+        """
 
-        # create and save state action plot
-        Q_actions = np.zeros((num_N_states**num_species))
+        Q_actions = get_state_action(sess, agent, visited_states, num_N_states, num_species)
 
-        for i in range(num_N_states**num_species):
-            if visited_states[0,i] == 0:
-                Q_actions[i] = - 1
-            else:
-                one_hot_state = np.zeros((1,num_N_states**num_species))
-                one_hot_state[0,i] = 1
-                allQ = np.array(sess.run(agent.predQ, feed_dict = {agent.inputs:one_hot_state}))
-                Q_actions[i] = np.argmax(allQ)
-
-        np.save(os.path.join(save_path,'state_action.npy'), Q_actions)
+        np.save(os.path.join(save_path,'state_actions','state_action.npy'), Q_actions)
 
         # plot results
         plt.figure(figsize = (16.0,12.0))
@@ -188,8 +217,8 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False):
         np.save(os.path.join(save_path,'visited_states.npy'), visited_states)
         np.save(os.path.join(save_path,'WORKING_data', 'reward_sds.npy'), reward_sds)
         np.save(os.path.join(save_path,'WORKING_data', 'time_sds.npy'), time_sds)
-        Q_actions = Q_actions.reshape([num_N_states]*num_species)
-        print(np.rot90(Q_actions))
+
+
 
         return Q_actions
 

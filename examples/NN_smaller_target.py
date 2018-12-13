@@ -26,4 +26,5 @@ def smaller_target_reward(X):
         reward = - 10
     return reward
 
-neural_Q_learn(parameters, save_path, debug = True, reward_func = smaller_target_reward)
+neural_Q_learn(parameters, save_path, debug = True, reward_func = smaller_target_reward,
+               pretrained_network = '/Users/Neythen/Desktop/masters_project/app/CBcurl_master/results/NN_smaller_target/WORKING_saved_network/trained_network.ckpt')

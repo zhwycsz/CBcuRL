@@ -8,7 +8,7 @@ General functions and classes used by all agents.
 
 """
 
-def sdot(S, t, Cin, A, params, num_species): # X is population vector, t is time, R is intrinsic growth rate vector, C is the rate limiting nutrient vector, A is interaction matrix
+def sdot(S, t, Cin, params, num_species): # X is population vector, t is time, R is intrinsic growth rate vector, C is the rate limiting nutrient vector, A is interaction matrix
     '''
     Calculates and returns derivatives for the numerical solver odeint
 
@@ -28,7 +28,7 @@ def sdot(S, t, Cin, A, params, num_species): # X is population vector, t is time
     C0 = np.array(S[-1])
 
     # extract parameters
-    C0in, q, y, y3, Rmax, Km, Km3 = params
+    C0in, q, y, y3, Rmax, Km, Km3, A = params
 
     R = monod(C, C0, Rmax, Km, Km3)
 
@@ -287,11 +287,10 @@ def convert_to_numpy(param_dict):
     '''
 
     # convert all relevant parameters into numpy arrays
-    param_dict['ode_params'][1], param_dict['ode_params'][2], param_dict['ode_params'][3] = \
-        np.array(param_dict['ode_params'][1], dtype = float), np.array(param_dict['ode_params'][2], dtype = float), np.array(param_dict['ode_params'][3], dtype = float)
-    param_dict['Q_params'][0] = np.array(param_dict['Q_params'][0], dtype = float)
+    param_dict['ode_params'][1], param_dict['ode_params'][2], param_dict['ode_params'][3], param_dict['ode_params'][7] = \
+        np.array(param_dict['ode_params'][1], dtype = float), np.array(param_dict['ode_params'][2], dtype = float), np.array(param_dict['ode_params'][3], dtype = float), np.array(param_dict['ode_params'][7], dtype = float)
+    param_dict['Q_params'][7] = np.array(param_dict['Q_params'][7], dtype = float)
     param_dict['Q_params'][8] = np.array(param_dict['Q_params'][8], dtype = float)
-    param_dict['Q_params'][9] = np.array(param_dict['Q_params'][9], dtype = float)
 
     return param_dict
 
@@ -318,35 +317,37 @@ def validate_param_dict(param_dict):
     if not all(Km >= 0 for Km in ode_params[5]) or not all(Km3 >= 0 for Km3 in ode_params[6]):
         raise ValueError("all saturation constants need to be positive")
 
+
     # validate Q_params
     Q_params = param_dict['Q_params']
-    num_species = Q_params[1]
-    if num_species < 0 or not isinstance(num_species, int):
-        raise ValueError("num_species needs to be a positive integer")
-    A = Q_params[0]
+    num_species = Q_params[0]
+    A = ode_params[7]
     if len(A) != num_species or not all(len(row) == num_species for row in A):
         raise ValueError("A needs to be a square matrix with shape (num_species, num_species)")
 
-    if Q_params[2] > num_species or Q_params[2] < 0 or not isinstance(Q_params[2], int):
+    if num_species < 0 or not isinstance(num_species, int):
+        raise ValueError("num_species needs to be a positive integer")
+
+    if Q_params[1] > num_species or Q_params[1] < 0 or not isinstance(Q_params[1], int):
         raise ValueError("num_controlled_species needs to be a positive integer <= to num_species")
-    if Q_params[3] < 0 or not isinstance(Q_params[3], int):
+    if Q_params[2] < 0 or not isinstance(Q_params[2], int):
         raise ValueError("num_N_states needs to be a positive integer")
 
 
-    if len(Q_params[4]) != 2 or Q_params[4][0] < 0 or Q_params[4][0] >= Q_params[4][1]:
+    if len(Q_params[3]) != 2 or Q_params[3][0] < 0 or Q_params[3][0] >= Q_params[3][1]:
         raise ValueError("N_bounds needs to be a list with two values in ascending order")
-    if Q_params[5] < 0 or not isinstance(num_species, int):
+    if Q_params[4] < 0 or not isinstance(num_species, int):
         raise ValueError("num_C0_states needs to be a positive integer")
-    if len(Q_params[6]) != 2 or Q_params[6][0] < 0 or Q_params[6][0] >= Q_params[6][1]:
+    if len(Q_params[5]) != 2 or Q_params[5][0] < 0 or Q_params[5][0] >= Q_params[5][1]:
         raise ValueError("C0_bounds needs to be a list with two values in ascending order")
-    if not 0 < Q_params[7] < 1:
+    if not 0 < Q_params[6] < 1:
         raise ValueError("discount factor needs to be between zero and one")
 
-    if not all(x > 0 for x in Q_params[8]):
+    if not all(x > 0 for x in Q_params[7]):
         raise ValueError("all initial populations need to be positive")
-    if not all(c > 0 for c in Q_params[9]):
+    if not all(c > 0 for c in Q_params[8]):
         raise ValueError("all initial concentrations need to be positive")
-    if Q_params[10] < 0:
+    if Q_params[9] < 0:
         raise ValueError("initial C0 needs to be positive")
 
 

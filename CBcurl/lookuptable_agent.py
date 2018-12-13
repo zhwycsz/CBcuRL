@@ -42,7 +42,7 @@ class LookupTableAgent():
             self.Q_table = np.zeros(tuple([num_N_states]*num_species + [num_Cin_states]*num_controlled_species))
 
     def choose_concentration(self, state, explore_rate, Q_params):
-        _, num_species, num_controlled_species, _, _, num_Cin_states, Cin_bounds,_ = Q_params
+        num_species, num_controlled_species, _, _, num_Cin_states, Cin_bounds,_ = Q_params
 
         # select an action
         action_indeces = self.select_action(state, explore_rate, num_Cin_states, num_controlled_species)
@@ -57,7 +57,7 @@ class LookupTableAgent():
 
     def get_next_solution(self, Cin, X, C, C0, Q_params, ode_params, t):
 
-        A, num_species, _, _, _, _, _, _ = Q_params
+        num_species = Q_params[0]
 
         #create state vector
         S = np.append(X, C)
@@ -65,7 +65,7 @@ class LookupTableAgent():
 
         # get next timsteps
         time_diff = 4  # frame skipping
-        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
+        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin, ode_params, num_species))[1:]
 
         # extract next values from sol
         xSol = sol[:, 0:num_species]
@@ -82,7 +82,7 @@ class LookupTableAgent():
 
 
     def update_table(self, X1, state, action_indeces, reward, Q_params, learning_rate):
-        _, num_species, _, num_N_states, N_bounds, _, _, gamma = Q_params
+        num_species, _, num_N_states, N_bounds, _, _, gamma = Q_params
         #discritise new state for next interation
         state1 = state_to_bucket(X1, N_bounds, num_N_states)
 
@@ -111,7 +111,7 @@ class LookupTableAgent():
             reward
         '''
         #extract parameters
-        _, num_species, _, num_N_states, N_bounds, _, _, _ = Q_params
+        num_species, _, num_N_states, N_bounds, _, _, _ = Q_params
 
         #discritise current state
         state = np.array(state_to_bucket(X, N_bounds, num_N_states))

@@ -17,9 +17,11 @@ def plot_pops(xSol, save_path = False):
     plt.xlim(xmin = 0)
 
     try:
+        '''
         plt.xlabel('Timestep')
         plt.ylabel('Population (A.U.)')
         plt.title('Populations After Training')
+        '''
         plt.savefig(save_path)
 
         plt.close()

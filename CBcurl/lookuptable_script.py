@@ -13,6 +13,19 @@ from plot_funcs import *
 from lookuptable_agent import *
 
 
+def state_action(agent, num_N_states, num_species):
+    # create and save state action plot
+    LT_actions = np.zeros([num_N_states] * num_species)
+    lookuptable = agent.Q_table
+    for i in range(num_N_states):
+        for j in range(num_N_states):
+            LT_actions[i,j] = np.argmax(lookuptable[i,j])
+            if np.count_nonzero(lookuptable[i,j]) == 0:
+                LT_actions[i,j] = - 1
+
+    return LT_actions
+
+
 def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = False, pretrained_table = None):
     '''
     Carries out a training run using a lookuptable agent
@@ -40,15 +53,15 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
         MAX_STEP_SIZE, MIN_EXPLORE_RATE, MAX_EXPLORE_RATE, cutoff, _, _  = param_dict['train_params']
     NOISE, error = param_dict['noise_params']
     num_species, num_controlled_species, num_N_states, num_Cin_states = \
-        param_dict['Q_params'][1], param_dict['Q_params'][2],  param_dict['Q_params'][3],param_dict['Q_params'][5]
+        param_dict['Q_params'][0], param_dict['Q_params'][1],  param_dict['Q_params'][2],param_dict['Q_params'][4]
     ode_params = param_dict['ode_params']
-    Q_params = param_dict['Q_params'][0:8]
-    initial_X = param_dict['Q_params'][8]
-    initial_C = param_dict['Q_params'][9]
-    initial_C0 = param_dict['Q_params'][10]
+    Q_params = param_dict['Q_params'][0:7]
+    initial_X = param_dict['Q_params'][7]
+    initial_C = param_dict['Q_params'][8]
+    initial_C0 = param_dict['Q_params'][9]
 
     #initialise results tracking
-    visited_states = np.zeros((1,num_N_states**num_species))
+    visited_states = np.zeros((1,int(num_N_states**num_species)))
     test_rewards, rewards_avs, test_ts, time_avs, reward_sds, time_sds = [], [], [], [], [], []
     episode_ts, episode_rewards = [], []
 
@@ -57,7 +70,7 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
     # make directories to store results
     os.makedirs(os.path.join(save_path, 'WORKING_data', 'train'), exist_ok = True)
     os.makedirs(os.path.join(save_path, 'WORKING_graphs', 'train'), exist_ok = True)
-
+    os.makedirs(os.path.join(save_path, 'state_actions'), exist_ok = True)
     for episode in range(1,NUM_EPISODES + 1):
         # reset for this episode
         X = initial_X
@@ -112,6 +125,9 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
             episode_ts = []
             episode_rewards = []
 
+            LT_actions = state_action(agent, num_N_states, num_species)
+            np.save(os.path.join(save_path,'state_actions','state_action' + str(episode) + '.npy'), LT_actions)
+
             if debug:
                 # plot current population curves
                 plt.figure(figsize = (22.0,12.0))
@@ -148,16 +164,9 @@ def lookuptable_Q_learn(param_dict, save_path, debug = False, reward_func = Fals
     np.save(os.path.join(save_path,'WORKING_data', 'reward_sds.npy'), reward_sds)
     np.save(os.path.join(save_path,'WORKING_data', 'time_sds.npy'), time_sds)
 
-    # create and save state action plot
-    LT_actions = np.zeros([num_N_states] * num_species)
-    lookuptable = agent.Q_table
-    for i in range(num_N_states):
-        for j in range(num_N_states):
-            LT_actions[i,j] = np.argmax(lookuptable[i,j])
-            if np.count_nonzero(lookuptable[i,j]) == 0:
-                LT_actions[i,j] = - 1
 
-    np.save(os.path.join(save_path,'state_action.npy'), LT_actions)
+    LT_actions = state_action(agent, num_N_states, num_species)
+    np.save(os.path.join(save_path,'state_actions','state_action.npy'), LT_actions)
 
     print(np.rot90(LT_actions))
 
@@ -203,4 +212,4 @@ if __name__ == '__main__': # for running on the cluster
     except:
         save_path = '/home/zcqsntr/Scratch/lookup/WORKING/'
 
-    Q_table = lookup_table_Q_learn(single_auxotroph, save_path, debug = True)
+    Q_table = lookuptable_Q_learn(single_auxotroph, save_path, debug = True)

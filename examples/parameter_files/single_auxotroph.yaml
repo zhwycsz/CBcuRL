@@ -6,10 +6,11 @@ ode_params:
   - [1.5, 3.] # Rmax (0.4 - 3)
   - [0., 0.00000102115] # Km (2) first bacteria not auxotroph so set to zero and ensure concentration is > 0
   - [0.00006845928, 0.00006845928] # Km3 (2)
-
-Q_params:
   - [[0, 0],
      [0, 0]] #A
+
+Q_params:
+
   - 2 # num_species
   - 1 # num controlled species
   - 10 # num_x_states
@@ -31,6 +32,7 @@ train_params:
   - 0.05 # MIN_STEP_SIZE
   - 0.5 # MAX_STEP_SIZE
   - 0. #MIN_EXPLORE_RATE
+  - 1. # MAX_EXPLORE_RATE
   - 1. # cuttoff
   - [50,50,50,50] # hidden layer sizes
   - 1000 # buffer_size
