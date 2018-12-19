@@ -12,7 +12,8 @@ import sys
 from keras.layers import Dense, Flatten, Input, merge, Lambda
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-
+import time
+import gc
 
 from continuous_agent import *
 
@@ -44,14 +45,11 @@ def learn():
     initial_C = param_dict['Q_params'][8]
     initial_C0 = param_dict['Q_params'][9]
 
-
-
     tf.reset_default_graph() #clear the tensorflow graph.
 
     #initialise saver and tensorflow graph
 
     init = tf.global_variables_initializer()
-
 
     # make directories to store results
     """
@@ -67,8 +65,9 @@ def learn():
         batch_size = 10
         tau = 0.1
         learning_rate = 1
-        actor = ActorNetwork(sess, batch_size, tau, learning_rate)
         critic = CriticNetwork(sess, batch_size, tau, learning_rate)
+        actor = ActorNetwork(sess, batch_size, tau, learning_rate)
+
         buffer = ExperienceBuffer(100)
         agent = Agent(sess, actor, critic, buffer, Cin_bounds[1])
 
@@ -81,7 +80,6 @@ def learn():
             X = np.random.random([num_species, ])* N_bounds[1]
             C = initial_C
             C0 = initial_C0
-
 
             i += 1
             for t in range(T_MAX):
@@ -107,9 +105,10 @@ def learn():
             step_size = get_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
 
             # run episode
-            for t in range(T_MAX):
+            for t in range(10):
                 nIters += 1 # for target Q update
-                X, C, C0, xSol_next, reward = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t)
+
+                X, C, C0, xSol_next, reward = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t, episode%test_freq == 0)
 
                 if NOISE:
                     X = add_noise(X, error)
@@ -138,7 +137,7 @@ def learn():
                 episode_ts.append(t)
 
                 time_avs.append(np.mean(episode_ts))
-                print(episode_ts)
+
                 rewards_avs.append(np.mean(episode_rewards))
 
                 # reset

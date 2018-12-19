@@ -12,6 +12,8 @@ import sys
 from keras.layers import Dense, Flatten, Input, merge, Lambda
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
+from keras import backend as K
+import time
 
 class ExperienceBuffer():
     def __init__(self, buffer_size):
@@ -55,15 +57,14 @@ class ExperienceBuffer():
 
 
 class Network():
-    def update_target(self):
+
+    def get_target_ops(self, tau):
         # update target network to the primary networks weights
-        primary_vars = self.model.get_weights()
-        target_vars = self.target.get_weights()
+        primary_vars = self.model.weights
 
-        for i in range(len(primary_vars)):
-            target_vars[i] = self.tau * primary_vars[i] + (1 - self.tau)* target_vars[i]
-        self.target.set_weights(target_vars)
-
+        target_vars = self.target.weights
+        ops = [var_target.assign(var_target * (1-tau) + var_primary*tau) for var_target, var_primary in zip(target_vars, primary_vars)]
+        return ops
 
 class ActorNetwork(Network):
 
@@ -71,8 +72,8 @@ class ActorNetwork(Network):
         self.state_size = 2
         self.action_size = 2
         self.sess = sess
-        self.model = self.create_network()
-        self.target_model = self.create_network()
+
+
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.tau = tau
@@ -84,10 +85,8 @@ class ActorNetwork(Network):
         self.params_grad = tf.gradients(self.model.output, self.model.trainable_weights, -self.action_gradient)
         grads = zip(self.params_grad, self.model.trainable_weights)
         self.optimize = tf.train.AdamOptimizer(learning_rate).apply_gradients(grads)
-
+        self.target_ops = self.get_target_ops(0.2)
         self.sess.run(tf.initialize_all_variables())
-
-
 
     def train(self, states, action_grads):
         self.sess.run(self.optimize, feed_dict={
@@ -109,23 +108,6 @@ class ActorNetwork(Network):
         return model
         # use model.fit(), model.predict()
 
-    def train(self, states, action_grads):
-
-
-        # This gradient will be provided by the critic network
-        self.action_gradient = tf.placeholder(tf.float32, [None, self.action_size])
-
-        # Combine the gradients, dividing by the batch size to
-        # account for the fact that the gradients are summed over the
-        # batch by tf.gradients
-        self.unnormalized_actor_gradients = tf.gradients(
-            self.model.output, self.model.trainable_weights, -self.action_gradient)
-        self.actor_gradients = list(map(lambda x: tf.div(x, self.batch_size), self.unnormalized_actor_gradients))
-
-        # Optimization Op
-        self.optimize = tf.train.AdamOptimizer(self.learning_rate).\
-            apply_gradients(zip(self.actor_gradients, self.model.trainable_weights))
-
 
 class CriticNetwork(Network):
 
@@ -139,12 +121,14 @@ class CriticNetwork(Network):
         self.learning_rate = learning_rate
         self.model, self.state, self.action = self.create_network()
         self.target, self.target_state, self.target_action = self.create_network()
+
         # Network target (y_i)
         # Obtained from the target networks
         self.predicted_q_value = tf.placeholder(tf.float32, [None, 1])
 
         # Get the gradient of the net w.r.t. the action
         self.action_grads = tf.gradients(self.model.output, self.action)
+        self.target_ops = self.get_target_ops(0.2)
 
         self.sess.run(tf.initialize_all_variables())
 
@@ -163,8 +147,6 @@ class CriticNetwork(Network):
         model.compile(loss='mse', optimizer=adam)
 
         return model, state, action
-
-
 
     def gradients(self, states, actions):
         return self.sess.run(self.action_grads, feed_dict={self.state: states, self.action: actions})[0]
@@ -186,8 +168,6 @@ class Agent():
         S = np.append(X, C)
         S = np.append(S, C0)
 
-
-
         time_diff = 4 # frame skipping
         sol = odeint(sdot, S, [t + x*1 for x in range(time_diff)], args=(Cin, ode_params, num_species))[1:]
 
@@ -203,6 +183,10 @@ class Agent():
         assert len(C1) == num_species, 'C is the wrong length: ' + str(len(C1))
 
         return X1, C1, C01, xSol
+
+    def update_target_networks(self, sess):
+        sess.run(self.actor.target_ops)
+        sess.run(self.critic.target_ops)
 
     def pre_train_step(self, sess, X, C, C0, t, Q_params, ode_params):
         '''
@@ -250,39 +234,47 @@ class Agent():
 
         return X1, C1, C01
 
-    def train_step(self, X, C, C0, explore_rate, Q_params, ode_params, t):
+    def train_step(self, X, C, C0, explore_rate, Q_params, ode_params, t, debug):
         # select action from actor plus some exploration noise
+        Cin = self.actor.model.predict(X.reshape(-1,2))[0] #yes
 
-        Cin = self.actor.model.predict(X.reshape(-1,2))[0]
         Cin *= self.action_scaling
 
         if np.random.random() < explore_rate: # maybe switch to noise
             Cin = np.random.random((2,)) * 0.1
         # run next step of the simulation
+
         X1, C1, C01, xSol_next = self.get_next_solution(Cin, X, C, C0, Q_params, ode_params, t)
-
         reward = self.reward(X1)
-
         self.buffer.add([X, Cin, reward, X1])
 
         # train on batch of experiences
-        s_batch, a_batch, r_batch, s1_batch = self.buffer.sample_batch(2)
+        s_batch, a_batch, r_batch, s1_batch = self.buffer.sample_batch(10)
 
         #build TD target
         target_as = self.actor.target.predict(s1_batch)
+
+
         target_Qs = self.critic.target.predict([s1_batch, target_as]) #CHECK APPENDS ARE WORKING PROPERLY ON THE BATCH
+
         y = 0.9
         TD_target = reward + y * target_Qs
 
-        # update critic network
+        # update actor and critic network
         self.critic.model.train_on_batch([s_batch, a_batch], TD_target)
-        action_grads = self.critic.gradients(s_batch, self.actor.model.predict(s_batch))
+
+        action_grads = self.critic.gradients(s_batch, self.actor.model.predict(s_batch)) # no
+
         self.actor.train(s_batch, action_grads)
 
-        #update target networks
-        self.actor.update_target()
-        self.critic.update_target()
-        
+        t0 = time.time()
+
+        self.update_target_networks(self.sess)
+
+        t1 = time.time()
+
+        print('target update: ', t1 - t0)
+
         return X1, C1, C01, xSol_next, reward
 
     def reward(self, X):

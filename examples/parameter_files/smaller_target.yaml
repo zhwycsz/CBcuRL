@@ -9,8 +9,8 @@ ode_params:
   - [0.00006845928, 0.00006845928] # Km3 (2)
   - [[-0.0001, -0.0001],
      [-0.0001, -0.0001]] #A
-Q_params:
 
+Q_params:
   - 2 # num_species
   - 2 # num_controlled_species
   - 10 # num_x_states

@@ -21,10 +21,9 @@ Q_params:
   - [0.1, 0.1] # initial_C
   - 1. #initial_C0
 
-
 train_params:
   - 1000 # num_episodes
-  - 10 # test_freq
+  - 1 # test_freq
   - 970 # explore_denom
   - 1000 # step_denom
   - 1000 # T_MAX
@@ -35,7 +34,6 @@ train_params:
   - 0.0001 # cutoff
   - [50,50,50,50] # hidden layer sizes
   - 1000 # buffer_size
-
 
 noise_params:
   - False # noise

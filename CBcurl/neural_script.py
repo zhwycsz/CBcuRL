@@ -10,6 +10,7 @@ import random
 from scipy.integrate import odeint
 from numpy import unravel_index
 import math
+import yaml
 
 from utilities import *
 from neural_agent import *
@@ -131,7 +132,7 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False, pr
             # run episode
             for t in range(T_MAX):
                 nIters += 1 # for target Q update
-                X, C, C0, xSol_next, reward, allQ, visited_states = agent.train_step(sess, X, C, C0, t, visited_states, explore_rate, step_size, Q_params, ode_params,nIters)
+                X, C, C0, xSol_next, reward, allQ, visited_states = agent.train_step_target(sess, X, C, C0, t, visited_states, explore_rate, step_size, Q_params, ode_params,nIters)
 
                 if NOISE:
                     X = add_noise(X, error)
@@ -225,35 +226,12 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False, pr
 
 
 if __name__ == '__main__': # for running on the cluster
+    f = open('/Users/Neythen/Desktop/masters_project/app/CBcurl_master/examples/parameter_files/double_auxotroph.yaml')
+    params = yaml.load(f)
+    f.close()
 
-    three_species_parameters = {
-        'ode_params': [1., 0.5, [480000., 480000., 480000.], [520000., 520000., 520000.], [0.6, 0.6, 0.6], [0.00048776, 0.00000102115, 0.00000102115], [0.00006845928, 0.00006845928,  0.00006845928]],
-        'Q_params': [[[0, -0.00005, -0.00005],[-0.00005, 0, -0.00005], [-0.00005,-0.00005,0]], 3,3, 10, [0.,1000.], 2, [0., 0.1], 0.9, [200., 200., 200.], [0.05, 0.05, 0.05], 1.],
-        'train_params': [50000, 100, 970, 1000, 1000, 0.05, 0.5, 0., [50,50,50,50]],
-        'noise_params': [False, 0.1]
-    }
 
-    double_auxotroph_params = {
-        'ode_params': [1., 0.5, [480000., 480000.], [520000., 520000.], [2., 2.], [0.00048776, 0.00000102115], [0.00006845928, 0.00006845928]],
-        'Q_params': [[[-0.1, -0.11],[-0.1, -0.1]], 2,2, 10, [0.,20.], 2, [0., 0.1], 0.9, [10.,10.], [0.1,0.1], 1.],
-        'train_params': [10000, 100, 970, 1000, 1000, 0.05, 0.5, 0., [50,50,50,50]],
-        'noise_params': [False, 0.1]
-    }
-
-    smaller_target_params = {
-        'ode_params': [1., 0.5, [480000., 480000.], [520000., 520000.], [0.6, 0.6], [0.00048776, 0.00048776], [0.00006845928, 0.00006845928]],
-        'Q_params': [[[-0.0001, -0.0001],[-0.0001, -0.0001]], 2,2, 10, [0.,1000.], 2, [0., 0.1], 0.9, [250.,550.], [0.05,0.05], 1.],
-        'train_params': [10000, 100, 950, 1000, 1000, 0.05, 0.5, 0., [50,50,50,50]],
-        'noise_params': [False, 0.05]
-    }
-    single_auxotroph =  {
-        'ode_params': [0.25, 0.5, [480000., 480000.], [520000., 520000.], [1.5, 3.], [0., 0.00000102115], [0.00006845928, 0.00006845928]],
-        'Q_params': [[[0, 0],[0, 0]], 2,1, 10, [0.,120000.], 2, [0., 0.3], 0.9, [50000.,50000.], [1.,0.1], 0.25],
-        'train_params': [10, 1, 95, 100, 1000, 0.05, 0.5, 0., [50,50,50,50]],
-        'noise_params': [False, 0.1]
-    }
-
-    validate_param_dict(double_auxotroph_params)
+    validate_param_dict(params)
 
     try:
         directory = sys.argv[1]
@@ -264,4 +242,4 @@ if __name__ == '__main__': # for running on the cluster
         save_path = os.path.join('/Users','Neythen','masters_project','results','Q_learning_results','WORKING')
 
 
-    neural_Q_learn(single_auxotroph, save_path, debug = True)
+    neural_Q_learn(params, save_path, debug = True)

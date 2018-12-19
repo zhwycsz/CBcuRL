@@ -5,7 +5,7 @@ import random
 
 from utilities import *
 from scipy.integrate import odeint
-
+import time
 
 class NeuralAgent():
     '''
@@ -41,6 +41,7 @@ class NeuralAgent():
         self.updateModel = trainer.minimize(loss)
         self.predict = tf.argmax(self.predQ, 1)
         self.experience_buffer = ExperienceBuffer(buffer_size)
+        self.target_ops = self.get_target_ops()
 
     def create_network(self,layer_sizes, type):
         '''
@@ -133,6 +134,14 @@ class NeuralAgent():
 
         # train network based on target and predicted Q values
         sess.run([self.updateModel], feed_dict = {self.inputs: state, self.TD_target:targetQ})
+
+    def get_target_ops(self):
+        tau = 1. # proportion of primary network used in update
+        primary_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'primary')
+        target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'target')
+
+        ops = [var_target.assign(var_target * (1-tau) + var_primary*tau) for var_target, var_primary in zip(target_vars, primary_vars)]
+        return ops
 
 
     def train_step(self, sess, X, C, C0, t, visited_states, explore_rate, step_size, Q_params, ode_params,n):
@@ -244,7 +253,7 @@ class NeuralAgent():
             nIters: the number of training iterations since last update of the target network
         '''
 
-        A, num_species, num_controlled_species, num_N_states, N_bounds, num_Cin_states, Cin_bounds, gamma = Q_params
+        num_species, num_controlled_species, num_N_states, N_bounds, num_Cin_states, Cin_bounds, gamma = Q_params
 
         state = state_to_one_hot(X, num_species, N_bounds, num_N_states) # flatten to a vector
 
@@ -266,7 +275,7 @@ class NeuralAgent():
 
         # get next time step
         time_diff = 4 # frame skipping
-        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,A,ode_params, num_species))[1:]
+        sol = odeint(sdot, S, [t + x *1 for x in range(time_diff)], args=(Cin,ode_params, num_species))[1:]
 
         # extract information from sol
         xSol = sol[:, 0:num_species]
@@ -301,13 +310,18 @@ class NeuralAgent():
 
         states, actions, rewards, state1s = np.array(states), np.array(actions), np.array(rewards), np.array(state1s)
 
-
+        t0 = time.time()
         Qs = sess.run(self.predQ,feed_dict = {self.inputs: states})
         assert not np.all(np.isnan(Qs)), 'Nan found in output, network probably unstable'
+        t1 = time.time()
+        print('predQ: ', t1-t0)
 
+        t0 = time.time()
         # get Q1 values for experience buffer
         Q1s = sess.run(self.target_predQ, feed_dict = {self.target_inputs: state1s})
+        t1 = time.time()
 
+        print('target_predQ: ', t1-t0)
         maxQ1s = np.max(Q1s, axis = 1)
 
         # build targets for all Qs in experience buffer
@@ -315,18 +329,24 @@ class NeuralAgent():
             Qs[i, actions[i]] += step_size*(rewards[i] + gamma*maxQ1s[i] - Qs[i,actions[i]])
 
         # train network based on target and predicted Q values
+        t0 = time.time()
         sess.run([self.updateModel], feed_dict = {self.inputs: states, self.TD_target:Qs})
-
+        t1 = time.time()
+        print('update_model: ', t1-t0)
         #update target network
-        target_update_freq = 1000
-        tau = 1. # proportion of primary network used in update
+        target_update_freq = 1
+
         if nIters % target_update_freq == 0:
+            t0 = time.time()
             # update target network to the primary networks weights
-            primary_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'primary')
-            target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope = 'target')
 
-            sess.run([var_target.assign(var_target * (1-tau) + var_primary*tau) for var_target, var_primary in zip(target_vars, primary_vars)])
 
+
+            sess.run(self.target_ops)
+            t1 = time.time()
+            print('update_target: ', t1-t0)
+            print(len(tf.get_default_graph().get_operations()))
+            print()
 
         return X1, C1, C01, xSol, reward, Qs, visited_states
 
