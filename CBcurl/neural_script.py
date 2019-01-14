@@ -201,7 +201,7 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False, pr
         plot_survival(time_avs,
                       os.path.join(save_path,'WORKING_graphs','train_survival.png'),
                       NUM_EPISODES, T_MAX, 'Training')
-        np.save(os.path.join(save_path,'WORKING_data','train_survival.npy'), time_avs)
+
 
         plt.figure(figsize = (22.0,12.0))
         plot_pops(xSol, os.path.join(save_path,'WORKING_graphs','pops.png'))
@@ -214,12 +214,11 @@ def neural_Q_learn(param_dict, save_path, debug = False, reward_func = False, pr
                      NUM_EPISODES,T_MAX, 'Training')
 
         # save results
+        np.save(os.path.join(save_path,'WORKING_data','train_survival.npy'), time_avs)
         np.save(os.path.join(save_path,'WORKING_data','Qtrain_rewards.npy'), rewards_avs)
         np.save(os.path.join(save_path,'visited_states.npy'), visited_states)
         np.save(os.path.join(save_path,'WORKING_data', 'reward_sds.npy'), reward_sds)
         np.save(os.path.join(save_path,'WORKING_data', 'time_sds.npy'), time_sds)
-
-
 
         return Q_actions
 

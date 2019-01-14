@@ -4,6 +4,7 @@ import numpy as np
 import keras
 from keras import backend as K
 import matplotlib
+matplotlib.use('agg')
 from utilities import *
 import yaml
 import tensorflow as tf
@@ -16,9 +17,11 @@ import time
 import gc
 
 from continuous_agent import *
+import matplotlib.pyplot as plt
 
+from plot_funcs import *
 
-def learn():
+def learn(r):
 
     debug = True
 
@@ -27,6 +30,7 @@ def learn():
 
     # open parameter file
     f = open('/Users/Neythen/Desktop/masters_project/app/CBcurl_master/examples/parameter_files/double_auxotroph.yaml')
+    #f = open('/jmain01/home/JAD012/cpb03/njt97-cpb03/CBcurl_master/examples/parameter_files/double_auxotroph.yaml')
     param_dict = yaml.load(f)
     f.close()
 
@@ -50,32 +54,32 @@ def learn():
     #initialise saver and tensorflow graph
 
     init = tf.global_variables_initializer()
-
+    save_path = '/Users/Neythen/Desktop/masters_project/results/continuous'
+    #save_path = '/jmain01/home/JAD012/cpb03/njt97-cpb03/Job_Scripts/continuous/repeat' + str(r)
     # make directories to store results
-    """
+
     os.makedirs(os.path.join(save_path,'data','train'), exist_ok = True)
     os.makedirs(os.path.join(save_path,'graphs','train'), exist_ok = True)
     os.makedirs(os.path.join(save_path,'saved_network'), exist_ok = True)
     os.makedirs(os.path.join(save_path,'state_actions'), exist_ok = True)
-    """
 
     with tf.Session() as sess:
         K.set_session(sess)
 
         batch_size = 10
         tau = 0.1
-        learning_rate = 1
+        learning_rate = 0.01
         critic = CriticNetwork(sess, batch_size, tau, learning_rate)
-        actor = ActorNetwork(sess, batch_size, tau, learning_rate)
+        learning_rate = 0.001
+        actor = ActorNetwork(sess, batch_size, tau, learning_rate, Cin_bounds[1])
 
-        buffer = ExperienceBuffer(100)
-        agent = Agent(sess, actor, critic, buffer, Cin_bounds[1])
-
+        buffer = ExperienceBuffer(buffer_size)
+        agent = Agent(sess, actor, critic, buffer)
         episode_ts, episode_rewards, time_avs, rewards_avs = [], [], [], []
 
-        # fill buffef with experiences based on random actions
+        # fill buffer with experiences based on random actions
         i = 0
-        while len(agent.buffer.buffer) < 100:
+        while len(agent.buffer.buffer) < buffer_size:
             #reset
             X = np.random.random([num_species, ])* N_bounds[1]
             C = initial_C
@@ -83,9 +87,9 @@ def learn():
 
             i += 1
             for t in range(T_MAX):
-                X, C, C0 = agent.pre_train_step(sess, X, C, C0, t, Q_params, ode_params)
+                X, C, C0 = agent.pre_train_step(sess, X, C, C0, t, Q_params, ode_params, cutoff)
 
-                if (not all(x>cutoff for x in X)) or t == T_MAX - 1: # if done
+                if (not all(x>cutoff for x in X)) or t == T_MAX - 1: # done check here and inside agent, remove one
                     break
 
         print('BUFFER DONE')
@@ -94,8 +98,8 @@ def learn():
         for episode in range(1,NUM_EPISODES+1):
 
             # reset for this episode
-            X = np.random.random([num_species, ]) * N_bounds[1]
-
+            #X = np.random.random([num_species, ]) * N_bounds[1]
+            X = initial_X
             C = initial_C
             C0 = initial_C0
             xSol = np.array([X])
@@ -105,10 +109,10 @@ def learn():
             step_size = get_rate(episode, MIN_STEP_SIZE, MAX_STEP_SIZE, step_denom)
 
             # run episode
-            for t in range(10):
+            for t in range(T_MAX):
                 nIters += 1 # for target Q update
 
-                X, C, C0, xSol_next, reward = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t, episode%test_freq == 0)
+                X, C, C0, xSol_next, reward, Cin_nw, action_grads = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t, episode%test_freq == 0, cutoff)
 
                 if NOISE:
                     X = add_noise(X, error)
@@ -119,6 +123,17 @@ def learn():
 
                 if (not all(x>cutoff for x in X)) or t == T_MAX - 1: # if done
                     break
+            print(X)
+            print(Cin_nw)
+            #print(action_grads)
+            #print(X, C, C0)
+
+            #print('actor_weights: ', agent.actor.model.get_weights())
+            print()
+
+
+            #print('critic_weights: ', agent.critic.model.get_weights())
+            print()
 
 
             # track results
@@ -145,17 +160,43 @@ def learn():
                 episode_ts = []
                 episode_rewards = []
 
-                """
+
                 if debug:
                     # plot current population curves
                     plt.figure(figsize = (22.0,12.0))
-                    plot_pops(xSol, os.path.join(save_path,'WORKING_graphs','train','pops_train_' + str(int(episode/test_freq)) + '.png'))
-                    np.save(os.path.join(save_path,'WORKING_data','train','pops_train_' + str(int(episode/test_freq)) + '.npy'), xSol)
-                """
+                    plot_pops(xSol, os.path.join(save_path,'graphs','train','pops_train_' + str(int(episode/test_freq)) + '.png'))
+                    np.save(os.path.join(save_path,'data','train','pops_train_' + str(int(episode/test_freq)) + '.npy'), xSol)
+
             else:
                 episode_rewards.append(running_reward)
                 episode_ts.append(t)
 
+        # plot results
+        plt.figure(figsize = (16.0,12.0))
+        plot_survival(time_avs,
+                      os.path.join(save_path,'graphs','train_survival.png'),
+                      NUM_EPISODES, T_MAX, 'Training')
+
+
+        plt.figure(figsize = (22.0,12.0))
+        plot_pops(xSol, os.path.join(save_path,'graphs','pops.png'))
+
+
+
+        plt.figure(figsize = (16.0,12.0))
+        plot_rewards(rewards_avs,
+                     os.path.join(save_path,'graphs','train_rewards.png'),
+                     NUM_EPISODES,T_MAX, 'Training')
+
+        # save results
+        np.save(os.path.join(save_path,'data','Pops.npy'), xSol)
+        np.save(os.path.join(save_path,'data','Qtrain_rewards.npy'), rewards_avs)
+        np.save(os.path.join(save_path,'data','train_survival.npy'), time_avs)
+
 
 if __name__ == '__main__':
-    learn()
+    try:
+        r = sys.argv[1]
+    except:
+        r = 0
+    learn(r)

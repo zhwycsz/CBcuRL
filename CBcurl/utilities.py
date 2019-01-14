@@ -65,6 +65,7 @@ def monod(C, C0, Rmax, Km, Km0):
     '''
 
     # convert to numpy
+
     C = np.array(C)
     Rmax = np.array(Rmax)
     Km = np.array(Km)
@@ -469,3 +470,14 @@ def create_one_hot(size, index):
     zeros = np.zeros(size)
     zeros[index] = 1
     return zeros.reshape(1, size)
+
+def Cin_to_q(Cin, q_out, concentration_of_AA):
+    return Cin * q_out / concentration_of_AA
+
+def OU(x, u, theta, sigma):
+    '''
+    Ornstein-Uhlenback process
+    dx = theta*(u - x)dt + sigma*dW
+    '''
+
+    return theta*(u - x) + sigma*np.random.randn(2,)
