@@ -67,10 +67,10 @@ def learn(r):
         K.set_session(sess)
 
         batch_size = 10
-        tau = 0.1
-        learning_rate = 0.01
+        tau = 0.001
+        learning_rate = 0.0001
         critic = CriticNetwork(sess, batch_size, tau, learning_rate)
-        learning_rate = 0.001
+        learning_rate = 0.00001
         actor = ActorNetwork(sess, batch_size, tau, learning_rate, Cin_bounds[1])
 
         buffer = ExperienceBuffer(buffer_size)
@@ -112,7 +112,7 @@ def learn(r):
             for t in range(T_MAX):
                 nIters += 1 # for target Q update
 
-                X, C, C0, xSol_next, reward, Cin_nw, action_grads = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t, episode%test_freq == 0, cutoff)
+                X, C, C0, xSol_next, reward, Cin_nw, C_in, action_grads = agent.train_step(X, C, C0, explore_rate, Q_params, ode_params, t, episode%test_freq == 0, cutoff)
 
                 if NOISE:
                     X = add_noise(X, error)
@@ -124,7 +124,8 @@ def learn(r):
                 if (not all(x>cutoff for x in X)) or t == T_MAX - 1: # if done
                     break
             print(X)
-            print(Cin_nw)
+            print('Cin_nw: ',Cin_nw)
+            print('C_in: ', C_in)
             #print(action_grads)
             #print(X, C, C0)
 

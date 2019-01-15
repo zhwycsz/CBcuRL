@@ -254,19 +254,19 @@ class Agent():
         Cin_nw = Cin.copy()
 
         if np.random.random() < explore_rate:
-            Cin += OU(Cin, np.array([0.05, 0.05]), explore_rate, 0.05*explore_rate)
+            Cin += explore_rate * OU(Cin, np.array([0.05, 0.05]), 0.6, 0.05)
             Cin = np.clip(Cin, 0, 0.1)
-
-
 
         #print(Cin)
         if any(np.isnan(Cin)):
             print('Nan in output')
             sys.exit()
+
+
         '''
         if np.random.random() < explore_rate: # maybe switch to noise
-            Cin = np.random.random((2,)) * self.actor.action_scaling
-            #Cin = np.random.randint(0, 2, size = (2,)) * self.actor.action_scaling
+            #Cin = np.random.random((2,)) * self.actor.action_scaling
+            Cin = np.random.randint(0, 2, size = (2,)) * self.actor.action_scaling
         '''
 
         # run next step of the simulation
@@ -286,11 +286,21 @@ class Agent():
 
         #build TD target
         target_as = self.actor.target.predict(s1_batch)
+
         target_Qs = self.critic.target.predict([s1_batch, target_as])
+
+        '''
+        print('state: ', s_batch[0])
+        print('action: ', a_batch[0])
+        print('state1: ', s1_batch[0])
+        print('reward: ', r_batch[0])
+        print()
+        '''
+
 
         y = 0.9
 
-        TD_target = reward + y * target_Qs * done_batch[:, np.newaxis] # reward if done, estimated future return if not
+        TD_target = r_batch[:, np.newaxis] + y * target_Qs *(1-done_batch[:, np.newaxis]) # reward if done, estimated future return if not
 
         # update actor and critic network
         mse = self.critic.model.train_on_batch([s_batch, a_batch], TD_target)
@@ -303,11 +313,12 @@ class Agent():
 
         action_grads = self.critic.gradients(s_batch, self.actor.model.predict(s_batch))
 
+
         self.actor.train(s_batch, action_grads)
 
         self.update_target_networks(self.sess)
 
-        return X1, C1, C01, xSol_next, reward, Cin_nw, action_grads
+        return X1, C1, C01, xSol_next, reward, Cin_nw, Cin, action_grads
 
     def reward(self, X):
         if all(x > 2 for x in X):

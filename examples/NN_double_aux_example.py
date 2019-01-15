@@ -21,7 +21,7 @@ def double_aux_reward(X):
     if all(x > 2 for x in X):
         reward = 1
     else:
-        reward = -1
+        reward = - 1
     return reward
 
 neural_Q_learn(parameters, save_path, debug = True, reward_func = double_aux_reward)
