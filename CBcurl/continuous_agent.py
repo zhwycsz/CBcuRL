@@ -157,7 +157,7 @@ class CriticNetwork(Network):
         h1 = Dense(30, activation='relu')(state)
         h2 = merge([h1,a1],mode='sum')
         #h3 = Dense(50, activation='relu')(h2)
-        V = Dense(self.action_size,activation='linear')(h2)
+        V = Dense(1,activation='linear')(h2)
         model = Model(input=[state,action],output=V)
         adam = Adam(lr=self.learning_rate)
         model.compile(loss='mse', optimizer=adam, metrics=['mse'])
@@ -253,15 +253,14 @@ class Agent():
 
         Cin_nw = Cin.copy()
 
-        if np.random.random() < explore_rate:
-            Cin += explore_rate * OU(Cin, np.array([0.05, 0.05]), 0.6, 0.05)
-            Cin = np.clip(Cin, 0, 0.1)
+
+        Cin += explore_rate * OU(Cin, np.array([0.05, 0.05]), 0.6, 0.03)
+        Cin = np.clip(Cin, 0, 0.1)
 
         #print(Cin)
         if any(np.isnan(Cin)):
             print('Nan in output')
             sys.exit()
-
 
         '''
         if np.random.random() < explore_rate: # maybe switch to noise
@@ -274,10 +273,11 @@ class Agent():
 
         reward = self.reward(X1)
 
-        done = 1 if (not all(x>cutoff for x in X)) else 0 # if done
+        done = 1 if (not all(x>cutoff for x in X1)) else 0
 
-        if done:
-            reward = -20
+        if done == 1:
+            reward = - 20
+            print('done')
 
         self.buffer.add([X, Cin, reward, X1, done])
 
@@ -287,7 +287,7 @@ class Agent():
         #build TD target
         target_as = self.actor.target.predict(s1_batch)
 
-        target_Qs = self.critic.target.predict([s1_batch, target_as])
+        target_Qs = self.critic.target.predict([s1_batch, target_as]).reshape(10,)
 
         '''
         print('state: ', s_batch[0])
@@ -300,7 +300,8 @@ class Agent():
 
         y = 0.9
 
-        TD_target = r_batch[:, np.newaxis] + y * target_Qs *(1-done_batch[:, np.newaxis]) # reward if done, estimated future return if not
+        # TD_target might be wrong shape, should output eapected return which is a scalar
+        TD_target = r_batch + y * target_Qs * (1-done_batch) # reward if done, estimated future return if not
 
         # update actor and critic network
         mse = self.critic.model.train_on_batch([s_batch, a_batch], TD_target)
@@ -313,7 +314,6 @@ class Agent():
 
         action_grads = self.critic.gradients(s_batch, self.actor.model.predict(s_batch))
 
-
         self.actor.train(s_batch, action_grads)
 
         self.update_target_networks(self.sess)
@@ -324,7 +324,7 @@ class Agent():
         if all(x > 2 for x in X):
             reward = 2 + X.min()
         else:
-            reward = - 2 + X.min()
+            reward = -2 + X.min()
 
 
         '''
